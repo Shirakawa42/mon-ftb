@@ -8,8 +8,11 @@ public static class Globals
     public static float perlinDiviser = 28.142f;
     public static readonly int worldHeight = 0;
     public static readonly int textureAtlasSizeInBlocks = 4;
-    public static readonly int preloadChunkPerThread = 8;
-    public static readonly int preload2ChunkPerThread = 512;
+    public static readonly int preloadChunkThreads = 16;
+    public static readonly int preload2ChunkThreads = 1;
+    public static readonly int chunkPerFrame = 16;
+    public static readonly float playerHeight = 2f;
+    public static object locker = new object();
 
     public static float normalizedBlockTextureSize
     {

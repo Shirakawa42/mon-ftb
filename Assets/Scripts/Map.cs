@@ -14,23 +14,17 @@ public class Map : MonoBehaviour
         cubeList = GetComponent<CubeList>();
     }
 
-    public bool checkForVoxel(Vector3 pos)
+    public ItemInfos getBlockAtPos(Vector3 pos)
     {
-        int xCheck = Mathf.FloorToInt(pos.x);
-        int yCheck = Mathf.FloorToInt(pos.y);
-        int zCheck = Mathf.FloorToInt(pos.z);
+        Vector3 chunkPos = Globals.posToChunkCoord(pos);
 
-        int xChunk = xCheck / Globals.chunkSize;
-        int yChunk = yCheck / Globals.chunkSize;
-        int zChunk = zCheck / Globals.chunkSize;
+        int x = Mathf.FloorToInt(pos.x) - (Mathf.FloorToInt(chunkPos.x) * Globals.chunkSize);
+        int y = Mathf.FloorToInt(pos.y) - (Mathf.FloorToInt(chunkPos.y) * Globals.chunkSize);
+        int z = Mathf.FloorToInt(pos.z) - (Mathf.FloorToInt(chunkPos.z) * Globals.chunkSize);
 
-        xCheck -= (xChunk * Globals.chunkSize);
-        yCheck -= (yChunk * Globals.chunkSize);
-        zCheck -= (zChunk * Globals.chunkSize);
-
-        Globals.Key key = new Globals.Key(Globals.posToChunkCoord(pos));
-        if (map.ContainsKey(key))
-            return cubeList.infosFromId[map[key].map[xCheck, yCheck, zCheck]].opaque;
-        return false;
+        Globals.Key key = new Globals.Key(chunkPos);
+        if (map.ContainsKey(key) && map[key].preloaded)
+            return cubeList.infosFromId[map[key].map[x, y, z]];
+        return cubeList.infosFromId[(int)Items.air];
     }
 }

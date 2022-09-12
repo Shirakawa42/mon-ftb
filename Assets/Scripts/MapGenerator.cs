@@ -2,6 +2,9 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Threading;
+using System.Collections.Concurrent;
+using System.Linq;
+using System.Threading.Tasks;
 
 public class MapGenerator : MonoBehaviour
 {
@@ -28,109 +31,86 @@ public class MapGenerator : MonoBehaviour
         new Thread(() => loadChunks(pos)).Start();
     }
 
-    void preloadChunks(List<BasicChunk> chunks)
-    {
-        foreach (BasicChunk chunk in chunks)
-            chunk.preload();
-    }
-
-    void preload2Chunks(List<BasicChunk> chunks)
-    {
-        foreach (BasicChunk chunk in chunks)
-            chunk.preload2();
-    }
-
     void preloader(Vector3 pos)
     {
         int nbchunks = 0;
-        List<Thread> threads = new List<Thread>();
-        List<BasicChunk> chunksToThread = new List<BasicChunk>();
+        BlockingCollection<BasicChunk> preloadQueue = new BlockingCollection<BasicChunk>();
         System.Diagnostics.Stopwatch watch = new System.Diagnostics.Stopwatch();
 
         watch.Start();
+
+        List<Task> loadTasks = Enumerable.Range(0, Globals.preloadChunkThreads).Select(n => Task.Run(() =>
+        {
+            foreach (BasicChunk chunk in preloadQueue.GetConsumingEnumerable())
+                chunk.preload();
+        })).ToList();
+
         for (int x = -preloadRange; x < preloadRange; x += Globals.chunkSize)
         {
+            int keyx = Mathf.FloorToInt((pos.x + x) / Globals.chunkSize);
             for (int y = -preloadRange; y < preloadRange; y += Globals.chunkSize)
             {
+                int keyy = Mathf.FloorToInt((pos.y + y) / Globals.chunkSize);
                 for (int z = -preloadRange; z < preloadRange; z += Globals.chunkSize)
                 {
-                    int keyx = (int)Mathf.Floor((pos.x + x) / Globals.chunkSize);
-                    int keyy = (int)Mathf.Floor((pos.y + y) / Globals.chunkSize);
-                    int keyz = (int)Mathf.Floor((pos.z + z) / Globals.chunkSize);
+                    int keyz = Mathf.FloorToInt((pos.z + z) / Globals.chunkSize);
                     Globals.Key key = Globals.getKey(keyx, keyy, keyz);
                     if (map.map.ContainsKey(key) == false)
                     {
                         map.map[key] = new BasicChunk(cubeList, key.getVector3(), map);
-                        chunksToThread.Add(map.map[key]);
+                        preloadQueue.Add(map.map[key]);
                         nbchunks++;
-                    }
-                    if (chunksToThread.Count >= Globals.preloadChunkPerThread)
-                    {
-                        List<BasicChunk> prout = chunksToThread;
-                        Thread thread = new Thread(() => preloadChunks(prout));
-                        thread.Start();
-                        threads.Add(thread);
-                        chunksToThread = new List<BasicChunk>();
                     }
                 }
             }
         }
-        if (chunksToThread.Count > 0)
-        {
-            Thread thread = new Thread(() => preloadChunks(chunksToThread));
-            thread.Start();
-            threads.Add(thread);
-        }
-        Debug.Log("chunks to preload: " + nbchunks + " in " + threads.Count + " threads.");
-        foreach (Thread t in threads)
-            t.Join();
+        preloadQueue.CompleteAdding();
+
+        Debug.Log("chunks to preload: " + nbchunks + " in " + Globals.preloadChunkThreads + " threads.");
+        Task.WaitAll(loadTasks.ToArray());
         Debug.Log("preloader done after " + watch.ElapsedMilliseconds + "ms");
         watch.Stop();
     }
 
     List<BasicChunk> preloader2(Vector3 pos)
     {
-        List<Thread> threads = new List<Thread>();
-        List<BasicChunk> chunksToThread = new List<BasicChunk>();
         List<BasicChunk> chunks = new List<BasicChunk>();
         System.Diagnostics.Stopwatch watch = new System.Diagnostics.Stopwatch();
+        BlockingCollection<BasicChunk> preload2Queue = new BlockingCollection<BasicChunk>();
 
         watch.Start();
+
+        List<Task> loadTasks = Enumerable.Range(0, Globals.preload2ChunkThreads)
+            .Select(n => Task.Run(() =>
+            {
+                foreach (BasicChunk chunk in preload2Queue.GetConsumingEnumerable())
+                    chunk.preload2();
+            })).ToList();
+
         for (int x = -loadRange; x < loadRange; x += Globals.chunkSize)
         {
+            int keyx = Mathf.FloorToInt((pos.x + x) / Globals.chunkSize);
             for (int y = -loadRange; y < loadRange; y += Globals.chunkSize)
             {
+                int keyy = Mathf.FloorToInt((pos.y + y) / Globals.chunkSize);
                 for (int z = -loadRange; z < loadRange; z += Globals.chunkSize)
                 {
-                    int keyx = (int)Mathf.Floor((pos.x + x) / Globals.chunkSize);
-                    int keyy = (int)Mathf.Floor((pos.y + y) / Globals.chunkSize);
-                    int keyz = (int)Mathf.Floor((pos.z + z) / Globals.chunkSize);
+                    int keyz = Mathf.FloorToInt((pos.z + z) / Globals.chunkSize);
                     Globals.Key key = Globals.getKey(keyx, keyy, keyz);
-                    if (!map.map[key].preloaded2)
+                    BasicChunk chunk = map.map[key];
+                    if (!chunk.preloaded2)
                     {
-                        chunksToThread.Add(map.map[key]);
-                        chunks.Add(map.map[key]);
-                    }
-                    if (chunksToThread.Count >= Globals.preload2ChunkPerThread)
-                    {
-                        List<BasicChunk> prout = chunksToThread;
-                        Thread thread = new Thread(() => preload2Chunks(prout));
-                        thread.Start();
-                        threads.Add(thread);
-                        chunksToThread = new List<BasicChunk>();
+                        preload2Queue.Add(chunk);
+                        chunks.Add(chunk);
+                        DebugPanelGlobals.loadingChunks++;
                     }
                 }
             }
         }
-        if (chunksToThread.Count > 0)
-        {
-            Thread thread = new Thread(() => preload2Chunks(chunksToThread));
-            thread.Start();
-            threads.Add(thread);
-        }
-        Debug.Log("chunks to preload2: " + chunks.Count + " in " + threads.Count + " threads.");
-        foreach (Thread t in threads)
-            t.Join();
+        preload2Queue.CompleteAdding();
+
+        Debug.Log("chunks to preload2: " + chunks.Count + " in " + Globals.preload2ChunkThreads + " threads.  Added in " + watch.ElapsedMilliseconds + "ms");
+        Task.WaitAll(loadTasks.ToArray());
         Debug.Log("preloader2 done after " + watch.ElapsedMilliseconds + "ms");
         watch.Stop();
         return chunks;
@@ -158,9 +138,19 @@ public class MapGenerator : MonoBehaviour
 
             while (chunksToLoad.Count > 0 && i < 1)
             {
-                if (!chunksToLoad[0].loaded && !chunksToLoad[0].empty)
-                    chunksToLoad[0].load();
-                chunksToLoad.RemoveAt(0);
+                while (chunksToLoad.Count > 0 && (chunksToLoad[0].loaded || chunksToLoad[0].empty))
+                {
+                    chunksToLoad.RemoveAt(0);
+                    DebugPanelGlobals.loadingChunks--;
+                }
+                for (int j = 0; j < Globals.chunkPerFrame && chunksToLoad.Count > 0; j++)
+                {
+                    if (!chunksToLoad[0].loaded && !chunksToLoad[0].empty)
+                        chunksToLoad[0].load();
+                    chunksToLoad.RemoveAt(0);
+                    DebugPanelGlobals.loadedChunks++;
+                    DebugPanelGlobals.loadingChunks--;
+                }
                 i++;
             }
             yield return null;
@@ -177,6 +167,7 @@ public class MapGenerator : MonoBehaviour
             Vector3 pos = transform.position;
             new Thread(() => loadChunks(pos)).Start();
             playerChunkCoord = chunkCoord;
+            DebugPanelGlobals.currentChunk = playerChunkCoord;
         }
         if (chunksToLoad.Count > 0 && !loadingChunks)
         {
