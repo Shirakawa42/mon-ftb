@@ -5,8 +5,6 @@ using UnityEngine;
 public class Player : MonoBehaviour
 {
     public Transform cam;
-    public Map map;
-    public CubeList cubeList;
     public float walkSpeed = 10f;
     public float sprintSpeed = 20f;
     public float jumpForce = 10f;
@@ -45,7 +43,7 @@ public class Player : MonoBehaviour
     {
         GetPlayerInputs();
         placeCursorBlock();
-        DebugPanelGlobals.playerPos = transform.position;
+        DebugPanelGlobals.playerPos = new IntVector3(transform.position);
     }
 
     void Start()
@@ -62,7 +60,7 @@ public class Player : MonoBehaviour
         {
             Vector3 pos = cam.position + (cam.forward * step);
 
-            if (map.getBlockAtPos(pos).opaque)
+            if (Map.getBlockAtPos(pos).isSolid)
             {
                 highlightBlock.position = new Vector3(Mathf.FloorToInt(pos.x), Mathf.FloorToInt(pos.y), Mathf.FloorToInt(pos.z));
                 placeBlock.position = lastPos;
@@ -126,18 +124,24 @@ public class Player : MonoBehaviour
         if (highlightBlock.gameObject.activeSelf)
         {
             if (Input.GetMouseButtonDown(0))
-                map.map[new Globals.Key(Globals.posToChunkCoord(highlightBlock.position))].EditVoxel(highlightBlock.position, 0);
+            {
+                IntVector3 chunkCoord = Globals.posToChunkCoord(highlightBlock.position);
+                Map.map(chunkCoord.x, chunkCoord.y, chunkCoord.z).EditVoxel(highlightBlock.position, 0);
+            }
             if (Input.GetMouseButtonDown(1))
-                map.map[new Globals.Key(Globals.posToChunkCoord(placeBlock.position))].EditVoxel(placeBlock.position, 1);
+            {
+                IntVector3 chunkCoord = Globals.posToChunkCoord(placeBlock.position);
+                Map.map(chunkCoord.x, chunkCoord.y, chunkCoord.z).EditVoxel(placeBlock.position, 4);
+            }
         }
     }
 
     private float checkDownSpeed(float downSpeed)
     {
-        if (map.getBlockAtPos(new Vector3(transform.position.x - playerWidth, transform.position.y + downSpeed, transform.position.z - playerWidth)).opaque
-         || map.getBlockAtPos(new Vector3(transform.position.x + playerWidth, transform.position.y + downSpeed, transform.position.z - playerWidth)).opaque
-         || map.getBlockAtPos(new Vector3(transform.position.x - playerWidth, transform.position.y + downSpeed, transform.position.z + playerWidth)).opaque
-         || map.getBlockAtPos(new Vector3(transform.position.x + playerWidth, transform.position.y + downSpeed, transform.position.z + playerWidth)).opaque)
+        if (Map.getBlockAtPos(new Vector3(transform.position.x - playerWidth, transform.position.y + downSpeed, transform.position.z - playerWidth)).isSolid
+         || Map.getBlockAtPos(new Vector3(transform.position.x + playerWidth, transform.position.y + downSpeed, transform.position.z - playerWidth)).isSolid
+         || Map.getBlockAtPos(new Vector3(transform.position.x - playerWidth, transform.position.y + downSpeed, transform.position.z + playerWidth)).isSolid
+         || Map.getBlockAtPos(new Vector3(transform.position.x + playerWidth, transform.position.y + downSpeed, transform.position.z + playerWidth)).isSolid)
         {
             isGrouned = true;
             return 0f;
@@ -151,10 +155,10 @@ public class Player : MonoBehaviour
 
     private float checkUpSpeed(float upSpeed)
     {
-        if (map.getBlockAtPos(new Vector3(transform.position.x - playerWidth, transform.position.y + Globals.playerHeight + upSpeed, transform.position.z - playerWidth)).opaque
-         || map.getBlockAtPos(new Vector3(transform.position.x + playerWidth, transform.position.y + Globals.playerHeight + upSpeed, transform.position.z - playerWidth)).opaque
-         || map.getBlockAtPos(new Vector3(transform.position.x - playerWidth, transform.position.y + Globals.playerHeight + upSpeed, transform.position.z + playerWidth)).opaque
-         || map.getBlockAtPos(new Vector3(transform.position.x + playerWidth, transform.position.y + Globals.playerHeight + upSpeed, transform.position.z + playerWidth)).opaque)
+        if (Map.getBlockAtPos(new Vector3(transform.position.x - playerWidth, transform.position.y + Globals.playerHeight + upSpeed, transform.position.z - playerWidth)).isSolid
+         || Map.getBlockAtPos(new Vector3(transform.position.x + playerWidth, transform.position.y + Globals.playerHeight + upSpeed, transform.position.z - playerWidth)).isSolid
+         || Map.getBlockAtPos(new Vector3(transform.position.x - playerWidth, transform.position.y + Globals.playerHeight + upSpeed, transform.position.z + playerWidth)).isSolid
+         || Map.getBlockAtPos(new Vector3(transform.position.x + playerWidth, transform.position.y + Globals.playerHeight + upSpeed, transform.position.z + playerWidth)).isSolid)
             return 0f;
         else
             return upSpeed;
@@ -164,8 +168,8 @@ public class Player : MonoBehaviour
     {
         get
         {
-            if (map.getBlockAtPos(new Vector3(transform.position.x, transform.position.y, transform.position.z + playerWidth)).opaque
-                    || map.getBlockAtPos(new Vector3(transform.position.x, transform.position.y + 1f, transform.position.z + playerWidth)).opaque)
+            if (Map.getBlockAtPos(new Vector3(transform.position.x, transform.position.y, transform.position.z + playerWidth)).isSolid
+                    || Map.getBlockAtPos(new Vector3(transform.position.x, transform.position.y + 1f, transform.position.z + playerWidth)).isSolid)
                 return true;
             return false;
         }
@@ -175,8 +179,8 @@ public class Player : MonoBehaviour
     {
         get
         {
-            if (map.getBlockAtPos(new Vector3(transform.position.x, transform.position.y, transform.position.z - playerWidth)).opaque
-                    || map.getBlockAtPos(new Vector3(transform.position.x, transform.position.y + 1f, transform.position.z - playerWidth)).opaque)
+            if (Map.getBlockAtPos(new Vector3(transform.position.x, transform.position.y, transform.position.z - playerWidth)).isSolid
+                    || Map.getBlockAtPos(new Vector3(transform.position.x, transform.position.y + 1f, transform.position.z - playerWidth)).isSolid)
                 return true;
             return false;
         }
@@ -186,8 +190,8 @@ public class Player : MonoBehaviour
     {
         get
         {
-            if (map.getBlockAtPos(new Vector3(transform.position.x - playerWidth, transform.position.y, transform.position.z)).opaque
-                    || map.getBlockAtPos(new Vector3(transform.position.x - playerWidth, transform.position.y + 1f, transform.position.z)).opaque)
+            if (Map.getBlockAtPos(new Vector3(transform.position.x - playerWidth, transform.position.y, transform.position.z)).isSolid
+                    || Map.getBlockAtPos(new Vector3(transform.position.x - playerWidth, transform.position.y + 1f, transform.position.z)).isSolid)
                 return true;
             return false;
         }
@@ -197,8 +201,8 @@ public class Player : MonoBehaviour
     {
         get
         {
-            if (map.getBlockAtPos(new Vector3(transform.position.x + playerWidth, transform.position.y, transform.position.z)).opaque
-                    || map.getBlockAtPos(new Vector3(transform.position.x + playerWidth, transform.position.y + 1f, transform.position.z)).opaque)
+            if (Map.getBlockAtPos(new Vector3(transform.position.x + playerWidth, transform.position.y, transform.position.z)).isSolid
+                    || Map.getBlockAtPos(new Vector3(transform.position.x + playerWidth, transform.position.y + 1f, transform.position.z)).isSolid)
                 return true;
             return false;
         }

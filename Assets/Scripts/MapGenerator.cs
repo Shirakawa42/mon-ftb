@@ -11,22 +11,23 @@ public class MapGenerator : MonoBehaviour
     public int preloadRange;
     public int loadRange;
     public GameObject world;
-    private Map map;
-    private CubeList cubeList;
-    private Vector3 playerChunkCoord;
+    public Material material;
+    public Camera cam;
 
+    [Range(0.95f, 0f)]
+    public float globalLightLevel;
+    public Color day;
+    public Color night;
+
+    private IntVector3 oldPlayerChunkCoord;
     private List<BasicChunk> chunksToLoad = new List<BasicChunk>();
+    private List<BasicChunk> loadedChunks = new List<BasicChunk>();
     private bool loadingChunks = false;
-    private object locker = new object();
-    private object locker2 = new object();
+    private bool preloadingChunks = false;
 
     void Start()
     {
-        playerChunkCoord = Globals.posToChunkCoord(transform.position);
-        map = world.GetComponent<Map>();
-        cubeList = world.GetComponent<CubeList>();
-        preloadRange *= Globals.chunkSize;
-        loadRange *= Globals.chunkSize;
+        oldPlayerChunkCoord = Globals.posToChunkCoord(transform.position);
         Vector3 pos = transform.position;
         new Thread(() => loadChunks(pos)).Start();
     }
@@ -45,21 +46,24 @@ public class MapGenerator : MonoBehaviour
                 chunk.preload();
         })).ToList();
 
-        for (int x = -preloadRange; x < preloadRange; x += Globals.chunkSize)
+        for (int x = -preloadRange * Globals.chunkSize; x < preloadRange * Globals.chunkSize; x += Globals.chunkSize)
         {
             int keyx = Mathf.FloorToInt((pos.x + x) / Globals.chunkSize);
-            for (int y = -preloadRange; y < preloadRange; y += Globals.chunkSize)
+            for (int y = -preloadRange * Globals.chunkSize; y < preloadRange * Globals.chunkSize; y += Globals.chunkSize)
             {
                 int keyy = Mathf.FloorToInt((pos.y + y) / Globals.chunkSize);
-                for (int z = -preloadRange; z < preloadRange; z += Globals.chunkSize)
+                for (int z = -preloadRange * Globals.chunkSize; z < preloadRange * Globals.chunkSize; z += Globals.chunkSize)
                 {
                     int keyz = Mathf.FloorToInt((pos.z + z) / Globals.chunkSize);
-                    Globals.Key key = Globals.getKey(keyx, keyy, keyz);
-                    if (map.map.ContainsKey(key) == false)
+                    lock (Map.mapLocker)
                     {
-                        map.map[key] = new BasicChunk(cubeList, key.getVector3(), map);
-                        preloadQueue.Add(map.map[key]);
-                        nbchunks++;
+                        if (Map.map(keyx, keyy, keyz) == null || !Map.map(keyx, keyy, keyz).preloaded)
+                        {
+                            if (Map.map(keyx, keyy, keyz) == null)
+                                Map.map(keyx, keyy, keyz, new BasicChunk(new IntVector3(keyx, keyy, keyz), this));
+                            preloadQueue.Add(Map.map(keyx, keyy, keyz));
+                            nbchunks++;
+                        }
                     }
                 }
             }
@@ -87,17 +91,16 @@ public class MapGenerator : MonoBehaviour
                     chunk.preload2();
             })).ToList();
 
-        for (int x = -loadRange; x < loadRange; x += Globals.chunkSize)
+        for (int x = -loadRange * Globals.chunkSize; x < loadRange * Globals.chunkSize; x += Globals.chunkSize)
         {
             int keyx = Mathf.FloorToInt((pos.x + x) / Globals.chunkSize);
-            for (int y = -loadRange; y < loadRange; y += Globals.chunkSize)
+            for (int y = -loadRange * Globals.chunkSize; y < loadRange * Globals.chunkSize; y += Globals.chunkSize)
             {
                 int keyy = Mathf.FloorToInt((pos.y + y) / Globals.chunkSize);
-                for (int z = -loadRange; z < loadRange; z += Globals.chunkSize)
+                for (int z = -loadRange * Globals.chunkSize; z < loadRange * Globals.chunkSize; z += Globals.chunkSize)
                 {
                     int keyz = Mathf.FloorToInt((pos.z + z) / Globals.chunkSize);
-                    Globals.Key key = Globals.getKey(keyx, keyy, keyz);
-                    BasicChunk chunk = map.map[key];
+                    BasicChunk chunk = Map.map(keyx, keyy, keyz);
                     if (!chunk.preloaded2)
                     {
                         preload2Queue.Add(chunk);
@@ -112,20 +115,20 @@ public class MapGenerator : MonoBehaviour
         Debug.Log("chunks to preload2: " + chunks.Count + " in " + Globals.preload2ChunkThreads + " threads.  Added in " + watch.ElapsedMilliseconds + "ms");
         Task.WaitAll(loadTasks.ToArray());
         Debug.Log("preloader2 done after " + watch.ElapsedMilliseconds + "ms");
+        DebugPanelGlobals.lastLoadTime = watch.ElapsedMilliseconds;
         watch.Stop();
         return chunks;
     }
 
     void loadChunks(Vector3 pos)
     {
-        lock (locker2)
-        {
-            preloader(pos);
-            List<BasicChunk> chunks = preloader2(pos);
-            lock (locker)
-                foreach (BasicChunk chunk in chunks)
-                    chunksToLoad.Add(chunk);
-        }
+        preloadingChunks = true;
+        preloader(pos);
+        List<BasicChunk> chunks = preloader2(pos);
+        lock (chunksToLoad)
+            foreach (BasicChunk chunk in chunks)
+                chunksToLoad.Add(chunk);
+        preloadingChunks = false;
     }
 
     IEnumerator loadChunksSmoothly()
@@ -134,25 +137,22 @@ public class MapGenerator : MonoBehaviour
 
         while (chunksToLoad.Count > 0)
         {
-            int i = 0;
-
-            while (chunksToLoad.Count > 0 && i < 1)
+            while (chunksToLoad.Count > 0 && (chunksToLoad[0].loaded || chunksToLoad[0].empty))
             {
-                while (chunksToLoad.Count > 0 && (chunksToLoad[0].loaded || chunksToLoad[0].empty))
-                {
-                    chunksToLoad.RemoveAt(0);
-                    DebugPanelGlobals.loadingChunks--;
-                }
-                for (int j = 0; j < Globals.chunkPerFrame && chunksToLoad.Count > 0; j++)
-                {
-                    if (!chunksToLoad[0].loaded && !chunksToLoad[0].empty)
-                        chunksToLoad[0].load();
-                    chunksToLoad.RemoveAt(0);
-                    DebugPanelGlobals.loadedChunks++;
-                    DebugPanelGlobals.loadingChunks--;
-                }
-                i++;
+                chunksToLoad.RemoveAt(0);
+                DebugPanelGlobals.loadingChunks--;
             }
+            for (int j = 0; j < Globals.chunkPerFrame && chunksToLoad.Count > 0; j++)
+            {
+                if (!chunksToLoad[0].loaded && !chunksToLoad[0].empty)
+                {
+                    chunksToLoad[0].load();
+                    loadedChunks.Add(chunksToLoad[0]);
+                }
+                chunksToLoad.RemoveAt(0);
+                DebugPanelGlobals.loadingChunks--;
+            }
+            DebugPanelGlobals.loadedChunks = loadedChunks.Count;
             yield return null;
         }
         loadingChunks = false;
@@ -160,14 +160,18 @@ public class MapGenerator : MonoBehaviour
 
     void Update()
     {
-        Vector3 chunkCoord = Globals.posToChunkCoord(transform.position);
-
-        if (chunkCoord != playerChunkCoord)
+        Globals.playerChunk = Globals.posToChunkCoord(transform.position);
+        
+        Shader.SetGlobalFloat("globalLightLevel", globalLightLevel);
+        cam.backgroundColor = Color.Lerp(day, night, globalLightLevel);
+        if (Globals.playerChunk != oldPlayerChunkCoord && !preloadingChunks)
         {
             Vector3 pos = transform.position;
+
             new Thread(() => loadChunks(pos)).Start();
-            playerChunkCoord = chunkCoord;
-            DebugPanelGlobals.currentChunk = playerChunkCoord;
+
+            oldPlayerChunkCoord = Globals.playerChunk;
+            DebugPanelGlobals.currentChunk = oldPlayerChunkCoord;
         }
         if (chunksToLoad.Count > 0 && !loadingChunks)
         {

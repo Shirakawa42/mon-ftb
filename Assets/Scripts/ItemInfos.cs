@@ -4,16 +4,18 @@ using UnityEngine;
 
 public class ItemInfos
 {
-    public int id;
-    public string name;
-    public bool opaque = true;
-    public int[] faces = new int[6];
+    public readonly int id;
+    public readonly string name;
+    public readonly bool opaque;
+    public readonly bool isSolid;
+    public readonly int[] faces = new int[6];
 
-    public ItemInfos(int id, string name, bool opaque, int topFace, int bottomFace, int leftFace, int rightFace, int frontFace, int backFace)
+    public ItemInfos(int id, string name, bool opaque, bool isSolid, int topFace, int bottomFace, int leftFace, int rightFace, int frontFace, int backFace)
     {
         this.id = id;
         this.name = name;
         this.opaque = opaque;
+        this.isSolid = isSolid;
         this.faces[0] = backFace;
         this.faces[1] = frontFace;
         this.faces[2] = topFace;

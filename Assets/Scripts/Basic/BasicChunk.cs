@@ -11,27 +11,40 @@ public class BasicChunk
     private List<Vector3> vertices = new List<Vector3>();
     private List<int> triangles = new List<int>();
     private List<Vector2> uvs = new List<Vector2>();
-    private CubeList cubeList;
+    private List<Color> colors = new List<Color>();
 
-    public Vector3 coord;
+    public MapGenerator mapGenerator;
+    public IntVector3 coord;
     public bool preloaded = false;
     public bool preloaded2 = false;
     public bool loaded = false;
     public int[,,] map = new int[Globals.chunkSize, Globals.chunkSize, Globals.chunkSize];
     public bool empty = true;
-    private Map worldMap;
+    public bool gameObjectInited = false;
+    public Queue<VoxelMod> modifications = new Queue<VoxelMod>();
 
-    public BasicChunk(CubeList cubeList, Vector3 chunkCoord, Map worldMap)
+    public BasicChunk(IntVector3 _coord, MapGenerator _mapGenerator)
     {
-        this.cubeList = cubeList;
-        this.coord = chunkCoord;
-        this.worldMap = worldMap;
+        coord = _coord;
+        mapGenerator = _mapGenerator;
     }
 
     public void preload2()
     {
-        ClearMesh();
+        lock (modifications)
+        {
+            if (modifications.Count > 0)
+            {
+                while (modifications.Count > 0)
+                {
+                    VoxelMod v = modifications.Dequeue();
+                    if (map[v.pos.x, v.pos.y, v.pos.z] == (int)Items.air)
+                        map[v.pos.x, v.pos.y, v.pos.z] = v.id;
+                }
+            }
+        }
 
+        ClearMesh();
         for (int x = 0; x < Globals.chunkSize; x++)
         {
             for (int y = 0; y < Globals.chunkSize; y++)
@@ -45,9 +58,13 @@ public class BasicChunk
                 }
             }
         }
-
         if (preloaded2)
+        {
+            if (!gameObjectInited)
+                initGameObject();
             CreateMesh();
+        }
+
         preloaded2 = true;
     }
 
@@ -58,42 +75,6 @@ public class BasicChunk
         loaded = true;
     }
 
-    private float Perlin3D(float x, float y, float z, float diviser)
-    {
-        x /= diviser;
-        y /= diviser;
-        z /= diviser;
-        float ab = Mathf.PerlinNoise(x, y);
-        float bc = Mathf.PerlinNoise(y, z);
-        float ac = Mathf.PerlinNoise(x, z);
-
-        float ba = Mathf.PerlinNoise(y, x);
-        float cb = Mathf.PerlinNoise(z, y);
-        float ca = Mathf.PerlinNoise(z, x);
-
-        float abc = ab + bc + ac + ba + cb + ca;
-        return abc / 6f;
-    }
-
-    private int getCubeToPlace(int x, int y, int z)
-    {
-        float perlin;
-
-        if (y + coord.y * Globals.chunkSize < Globals.worldHeight)
-        {
-            perlin = Perlin3D(coord.x * Globals.chunkSize + x, coord.y * Globals.chunkSize + y, coord.z * Globals.chunkSize + z, Globals.perlinDiviser);
-            if (perlin < .42f)
-                return (int)Items.air;
-            return (int)Items.stone;
-        }
-        perlin = Mathf.PerlinNoise((coord.x * Globals.chunkSize + x) / Globals.perlinDiviser, (coord.z * Globals.chunkSize + z) / Globals.perlinDiviser);
-        if (coord.y * Globals.chunkSize + y < perlin * 15f)
-            return (int)Items.stone;
-        if (coord.y * Globals.chunkSize + y < perlin * 25f)
-            return (int)Items.grass;
-        return (int)Items.air;
-    }
-
     public void preload()
     {
         for (int x = 0; x < Globals.chunkSize; x++)
@@ -102,7 +83,7 @@ public class BasicChunk
             {
                 for (int z = 0; z < Globals.chunkSize; z++)
                 {
-                    map[x, y, z] = getCubeToPlace(x, y, z);
+                    map[x, y, z] = ProceduralFuncs.getCubeToPlace(x, y, z, coord);
                     if (map[x, y, z] != (int)Items.air)
                         empty = false;
                 }
@@ -118,22 +99,24 @@ public class BasicChunk
         int z = Mathf.FloorToInt(pos.z);
 
         if (x < 0)
-            return cubeList.infosFromId[worldMap.map[Globals.getKey(Mathf.FloorToInt(coord.x - 1f), Mathf.FloorToInt(coord.y), Mathf.FloorToInt(coord.z))].map[Globals.chunkSize - 1, y, z]].opaque;
+            return CubeList.infosFromId[Map.map(coord.x - 1, coord.y, coord.z).map[Globals.chunkSize - 1, y, z]].opaque;
         if (x > Globals.chunkSize - 1)
-            return cubeList.infosFromId[worldMap.map[Globals.getKey(Mathf.FloorToInt(coord.x + 1f), Mathf.FloorToInt(coord.y), Mathf.FloorToInt(coord.z))].map[0, y, z]].opaque;
+            return CubeList.infosFromId[Map.map(coord.x + 1, coord.y, coord.z).map[0, y, z]].opaque;
         if (y < 0)
-            return cubeList.infosFromId[worldMap.map[Globals.getKey(Mathf.FloorToInt(coord.x), Mathf.FloorToInt(coord.y - 1f), Mathf.FloorToInt(coord.z))].map[x, Globals.chunkSize - 1, z]].opaque;
+            return CubeList.infosFromId[Map.map(coord.x, coord.y - 1, coord.z).map[x, Globals.chunkSize - 1, z]].opaque;
         if (y > Globals.chunkSize - 1)
-            return cubeList.infosFromId[worldMap.map[Globals.getKey(Mathf.FloorToInt(coord.x), Mathf.FloorToInt(coord.y + 1f), Mathf.FloorToInt(coord.z))].map[x, 0, z]].opaque;
+            return CubeList.infosFromId[Map.map(coord.x, coord.y + 1, coord.z).map[x, 0, z]].opaque;
         if (z < 0)
-            return cubeList.infosFromId[worldMap.map[Globals.getKey(Mathf.FloorToInt(coord.x), Mathf.FloorToInt(coord.y), Mathf.FloorToInt(coord.z - 1f))].map[x, y, Globals.chunkSize - 1]].opaque;
+            return CubeList.infosFromId[Map.map(coord.x, coord.y, coord.z - 1).map[x, y, Globals.chunkSize - 1]].opaque;
         if (z > Globals.chunkSize - 1)
-            return cubeList.infosFromId[worldMap.map[Globals.getKey(Mathf.FloorToInt(coord.x), Mathf.FloorToInt(coord.y), Mathf.FloorToInt(coord.z + 1f))].map[x, y, 0]].opaque;
-        return cubeList.infosFromId[map[x, y, z]].opaque;
+            return CubeList.infosFromId[Map.map(coord.x, coord.y, coord.z + 1).map[x, y, 0]].opaque;
+        return CubeList.infosFromId[map[x, y, z]].opaque;
     }
 
     void AddBasicCubeDatas(Vector3 pos, int x, int y, int z)
     {
+        bool opaque = CubeList.infosFromId[map[x, y, z]].opaque;
+
         for (int j = 0; j < 6; j++)
         {
             if (!checkSides(pos + BasicCube.faceChecks[j]))
@@ -143,7 +126,31 @@ public class BasicChunk
                 vertices.Add(pos + BasicCube.cubeVertices[BasicCube.cubeIndices[j, 2]]);
                 vertices.Add(pos + BasicCube.cubeVertices[BasicCube.cubeIndices[j, 3]]);
 
-                AddTexture(cubeList.infosFromId[map[x, y, z]].faces[j]);
+                AddTexture(CubeList.infosFromId[map[x, y, z]].faces[j]);
+
+                float lightLevel;
+
+                int yPos = (int)pos.y + 1;
+                bool inShade = false;
+                while (yPos < Globals.chunkSize)
+                {
+                    if (map[(int)pos.x, yPos, (int)pos.z] != 0)
+                    {
+                        inShade = true;
+                        break;
+                    }
+
+                    yPos++;
+                }
+
+                if (inShade)
+                    lightLevel = 0.5f;
+                else
+                    lightLevel = 0f;
+                colors.Add(new Color(0, 0, 0, lightLevel));
+                colors.Add(new Color(0, 0, 0, lightLevel));
+                colors.Add(new Color(0, 0, 0, lightLevel));
+                colors.Add(new Color(0, 0, 0, lightLevel));
 
                 triangles.Add(vertexIndex);
                 triangles.Add(vertexIndex + 1);
@@ -151,6 +158,7 @@ public class BasicChunk
                 triangles.Add(vertexIndex + 2);
                 triangles.Add(vertexIndex + 1);
                 triangles.Add(vertexIndex + 3);
+
                 vertexIndex += 4;
             }
         }
@@ -161,10 +169,11 @@ public class BasicChunk
         chunkObject = new GameObject();
         meshFilter = chunkObject.AddComponent<MeshFilter>();
         meshRenderer = chunkObject.AddComponent<MeshRenderer>();
-        meshRenderer.material = this.cubeList.textureMaterial;
-        chunkObject.transform.SetParent(cubeList.transform);
+        meshRenderer.material = mapGenerator.material;
+        chunkObject.transform.SetParent(mapGenerator.world.transform);
         chunkObject.transform.position = new Vector3(coord.x * Globals.chunkSize, coord.y * Globals.chunkSize, coord.z * Globals.chunkSize);
         chunkObject.name = "Chunk " + coord.x + " " + coord.y + " " + coord.z;
+        gameObjectInited = true;
     }
 
     void CreateMesh()
@@ -173,6 +182,7 @@ public class BasicChunk
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
         mesh.uv = uvs.ToArray();
+        mesh.colors = colors.ToArray();
         mesh.RecalculateNormals();
         meshFilter.mesh = mesh;
     }
@@ -183,22 +193,23 @@ public class BasicChunk
         vertices.Clear();
         triangles.Clear();
         uvs.Clear();
+        colors.Clear();
     }
 
     public void EditVoxel(Vector3 pos, int newID)
     {
-        Vector3 chunkPos = Globals.posToChunkCoord(pos);
+        IntVector3 IntVector3 = Globals.posToChunkCoord(pos);
 
-        int x = Mathf.FloorToInt(pos.x) - (Mathf.FloorToInt(chunkPos.x) * Globals.chunkSize);
-        int y = Mathf.FloorToInt(pos.y) - (Mathf.FloorToInt(chunkPos.y) * Globals.chunkSize);
-        int z = Mathf.FloorToInt(pos.z) - (Mathf.FloorToInt(chunkPos.z) * Globals.chunkSize);
+        int x = Mathf.FloorToInt(pos.x) - IntVector3.x * Globals.chunkSize;
+        int y = Mathf.FloorToInt(pos.y) - IntVector3.y * Globals.chunkSize;
+        int z = Mathf.FloorToInt(pos.z) - IntVector3.z * Globals.chunkSize;
 
         map[x, y, z] = newID;
         preload2();
-        UpdateNeighbors(x, y, z, chunkPos);
+        UpdateNeighbors(x, y, z, IntVector3);
     }
 
-    void UpdateNeighbors(int x, int y, int z, Vector3 chunkPos)
+    void UpdateNeighbors(int x, int y, int z, IntVector3 IntVector3)
     {
         Vector3 thisVoxel = new Vector3(x, y, z);
 
@@ -208,14 +219,14 @@ public class BasicChunk
 
             if (!IsVoxelInChunk((int)currentVoxel.x, (int)currentVoxel.y, (int)currentVoxel.z))
             {
-                worldMap.map[new Globals.Key(chunkPos + BasicCube.faceChecks[p])].preload2();
+                IntVector3 toTry = IntVector3 + BasicCube.faceChecks[p];
+                Map.map((int)toTry.x, (int)toTry.y, (int)toTry.z).preload2();
             }
         }
     }
 
     bool IsVoxelInChunk(int x, int y, int z)
     {
-
         if (x < 0 || x > Globals.chunkSize - 1 || y < 0 || y > Globals.chunkSize - 1 || z < 0 || z > Globals.chunkSize - 1)
             return false;
         else

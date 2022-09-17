@@ -4,14 +4,30 @@ using UnityEngine;
 
 public static class Globals
 {
-    public static readonly int chunkSize = 32;
-    public static float perlinDiviser = 28.142f;
-    public static readonly int worldHeight = 0;
-    public static readonly int textureAtlasSizeInBlocks = 4;
+    // Optimisation
     public static readonly int preloadChunkThreads = 16;
-    public static readonly int preload2ChunkThreads = 1;
+    public static readonly int preload2ChunkThreads = 16;
     public static readonly int chunkPerFrame = 16;
+
+    // Procedural
+    public static readonly float seed = 384f;
+    public static readonly int chunkSize = 48;
+    public static float perlinCaveDiviser = 15f;
+    public static readonly int maxWorldSize = 512;
+
+    // Procedural Structures
+    public static float treePlacementScale = 8f;
+    public static int treeZoneThreshold = 70;
+    public static int treePlacementThreshold = 90;
+    public static int maxTreeHeight = 12;
+    public static int minTreeHeight = 6;
+
+    // Player infos
     public static readonly float playerHeight = 2f;
+    public static IntVector3 playerChunk;
+
+    // other
+    public static readonly int textureAtlasSizeInBlocks = 16;
     public static object locker = new object();
 
     public static float normalizedBlockTextureSize
@@ -19,47 +35,10 @@ public static class Globals
         get { return 1f / (float)textureAtlasSizeInBlocks; }
     }
 
-    public static Vector3 posToChunkCoord(Vector3 pos)
+    public static IntVector3 posToChunkCoord(Vector3 pos)
     {
-        return new Vector3((int)Mathf.Floor(pos.x / Globals.chunkSize),
+        return new IntVector3((int)Mathf.Floor(pos.x / Globals.chunkSize),
                            (int)Mathf.Floor(pos.y / Globals.chunkSize),
                            (int)Mathf.Floor(pos.z / Globals.chunkSize));
-    }
-
-    public struct Key
-    {
-        public readonly int x;
-        public readonly int y;
-        public readonly int z;
-        public Key(int item1, int item2, int item3)
-        {
-            x = item1;
-            y = item2;
-            z = item3;
-        }
-
-        public Key(float item1, float item2, float item3)
-        {
-            x = Mathf.FloorToInt(item1);
-            y = Mathf.FloorToInt(item2);
-            z = Mathf.FloorToInt(item3);
-        }
-
-        public Key(Vector3 pos)
-        {
-            x = Mathf.FloorToInt(pos.x);
-            y = Mathf.FloorToInt(pos.y);
-            z = Mathf.FloorToInt(pos.z);
-        }
-
-        public Vector3 getVector3()
-        {
-            return new Vector3(x, y, z);
-        }
-    }
-
-    public static Key getKey(int x, int y, int z)
-    {
-        return new Key(x, y, z);
     }
 }

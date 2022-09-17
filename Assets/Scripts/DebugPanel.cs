@@ -10,6 +10,7 @@ public class DebugPanel : MonoBehaviour
     public Text currentPos;
     public Text loadedChunks;
     public Text loadingChunks;
+    public Text lastLoadTime;
 
     private float refreshTime = .25f;
 
@@ -26,6 +27,7 @@ public class DebugPanel : MonoBehaviour
                     + Mathf.FloorToInt(DebugPanelGlobals.playerPos.z);
             loadedChunks.text = "Loaded Chunks: " + DebugPanelGlobals.loadedChunks;
             loadingChunks.text = "Loading Chunks: " + DebugPanelGlobals.loadingChunks;
+            lastLoadTime.text = "Last loading time: " + (DebugPanelGlobals.lastLoadTime / 1000f).ToString("0.0") + "sec";
             refreshTime = 0f;
         }
         else
